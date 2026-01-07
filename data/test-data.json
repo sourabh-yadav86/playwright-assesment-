@@ -1,0 +1,35 @@
+{
+  "filterCriteria": [
+    "Sale",
+    "Neu",
+    "Limitiert"
+  ],
+  "testCases": {
+    "douglasParfumTest": {
+      "baseUrl": "https://www.douglas.de/de",
+      "navigation": {
+        "homePage": "https://www.douglas.de/de",
+        "parfumPage": "/parfum"
+      },
+      "filters": {
+        "sale": "Sale",
+        "neu": "Neu",
+        "limitiert": "Limitiert"
+      },
+      "expectedElements": {
+        "cookieBanner": true,
+        "parfumLink": true,
+        "productList": true,
+        "filterSection": true
+      }
+    }
+  },
+  "browserConfig": {
+    "headless": false,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    }
+  }
+}
+
