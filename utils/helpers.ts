@@ -1,9 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { config } from '../config/config';
 
-/**
- * Reusable helper methods for common operations
- */
 export class Helpers {
   constructor(private page: Page) {}
 

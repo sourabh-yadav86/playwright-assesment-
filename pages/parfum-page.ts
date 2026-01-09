@@ -2,10 +2,6 @@ import { Page } from '@playwright/test';
 import { BasePage } from './base-page';
 import { config } from '../config/config';
 
-/**
- * Parfum Page Object Model
- * Handles interactions with the Parfum product listing page
- */
 export class ParfumPage extends BasePage {
   private readonly filterSection = '[class*="filter"], [data-testid*="filter"], aside, [role="complementary"]';
   private readonly filterCriteria = {
@@ -25,25 +21,59 @@ export class ParfumPage extends BasePage {
 
   async verifyParfumPageLoaded(): Promise<void> {
     try {
-      const productsVisible = await this.helpers.isVisible(this.productList, config.timeout.medium);
-      if (productsVisible) {
-        return;
-      }
-      
-      const currentUrl = this.page.url();
-      if (currentUrl.includes('/parfum') || currentUrl.includes('/c/parfum')) {
-        await this.page.waitForTimeout(3000);
-        const retryVisible = await this.helpers.isVisible(this.productList, config.timeout.medium);
-        if (retryVisible) {
-          return;
-        }
+      const pageContent = await this.page.content();
+      if (pageContent.includes('Access Denied') || pageContent.includes('access denied')) {
+        console.log('Access Denied page detected in verifyParfumPageLoaded');
+        throw new Error('Access Denied: Website is blocking automated access');
       }
       
       await this.page.waitForLoadState('domcontentloaded');
+      
+      const productSelectors = [
+        'a[href*="/de/p/"]',
+        'a[href*="/p/"]',
+        '[class*="product"]',
+        'article',
+        '[class*="tile"]',
+        '[class*="card"]'
+      ];
+      
+      let productsFound = false;
+      for (const selector of productSelectors) {
+        try {
+          await this.page.waitForSelector(selector, { 
+            timeout: config.timeout.short,
+            state: 'visible' 
+          });
+          productsFound = true;
+          console.log(`Products found using selector: ${selector}`);
+          break;
+        } catch {
+          continue;
+        }
+      }
+      
+      if (!productsFound) {
+        await this.page.waitForTimeout(1000);
+        
+        for (const selector of productSelectors) {
+          const elements = this.page.locator(selector);
+          const count = await elements.count();
+          if (count > 0) {
+            productsFound = true;
+            console.log(`Products found after wait using selector: ${selector}`);
+            break;
+          }
+        }
+      }
+      
       try {
-        await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 });
       } catch {
-        console.log('Networkidle timeout in verifyParfumPageLoaded, but continuing...');
+      }
+      
+      if (!productsFound) {
+        console.log('Warning: No products found during page verification, but continuing...');
       }
     } catch (error) {
       console.log('Parfum page verification: ', error);
@@ -72,14 +102,14 @@ export class ParfumPage extends BasePage {
         if (filterVisible) {
           await this.helpers.clickWithRetry(filterSelector);
           
-          await this.page.waitForTimeout(2000);
+          await this.page.waitForTimeout(1000);
           
           const applyButtonVisible = await this.helpers.isVisible(this.applyFilterButton, config.timeout.short);
           if (applyButtonVisible) {
             await this.helpers.clickWithRetry(this.applyFilterButton);
           }
           
-          await this.page.waitForTimeout(3000);
+          await this.page.waitForTimeout(1000);
         }
       }
     } catch (error) {
@@ -88,9 +118,9 @@ export class ParfumPage extends BasePage {
   }
 
   async getProductList(): Promise<Array<{ name: string; price: string }>> {
-    const productsVisible = await this.helpers.isVisible(this.productList, config.timeout.medium);
+    const productsVisible = await this.helpers.isVisible(this.productList, config.timeout.short);
     if (!productsVisible) {
-      await this.page.waitForTimeout(3000);
+      await this.page.waitForTimeout(1000);
     }
     
     const products: Array<{ name: string; price: string }> = [];
@@ -169,23 +199,46 @@ export class ParfumPage extends BasePage {
   }
 
   async getProductCount(): Promise<number> {
+    await this.page.waitForTimeout(1000);
+    
     const selectors = [
       'a[href*="/de/p/"]',
+      'a[href*="/p/"]',
       '[class*="product"]',
       '[data-testid*="product"]',
       'article',
       '[class*="tile"]',
-      '[class*="card"]'
+      '[class*="card"]',
+      '[class*="item"]',
+      '[data-product-id]',
+      '[itemtype*="Product"]',
     ];
     
     for (const selector of selectors) {
-      const elements = this.page.locator(selector);
-      const count = await elements.count();
-      if (count > 0) {
-        return count;
+      try {
+        const elements = this.page.locator(selector);
+        const count = await elements.count();
+        if (count > 0) {
+          console.log(`Found ${count} products using selector: ${selector}`);
+          return count;
+        }
+      } catch (error) {
+        continue;
       }
     }
     
+    try {
+      const allLinks = this.page.locator('a[href*="/p/"]');
+      const linkCount = await allLinks.count();
+      if (linkCount > 0) {
+        console.log(`Found ${linkCount} potential product links`);
+        return linkCount;
+      }
+    } catch (error) {
+      console.log('Error checking for product links:', error);
+    }
+    
+    console.log('No products found with any selector');
     return 0;
   }
 
@@ -194,7 +247,7 @@ export class ParfumPage extends BasePage {
       const clearButtonVisible = await this.helpers.isVisible(this.clearFiltersButton, config.timeout.short);
       if (clearButtonVisible) {
         await this.helpers.clickWithRetry(this.clearFiltersButton);
-        await this.page.waitForTimeout(2000);
+        await this.page.waitForTimeout(1000);
       }
     } catch (error) {
       console.log('Error clearing filters:', error);

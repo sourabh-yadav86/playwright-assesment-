@@ -1,7 +1,3 @@
-/**
- * Centralized configuration file
- * No hardcoded values - all configuration is managed here
- */
 export const config = {
   baseUrl: process.env.BASE_URL || 'https://www.douglas.de/de',
   timeout: {

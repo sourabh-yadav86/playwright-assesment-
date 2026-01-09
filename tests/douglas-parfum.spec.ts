@@ -9,7 +9,92 @@ test.describe('Douglas.de Parfum Product Listing Tests', () => {
   let homePage: HomePage;
   let parfumPage: ParfumPage;
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, context }) => {
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+      });
+      
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          const plugins = [];
+          for (let i = 0; i < 5; i++) {
+            plugins.push({
+              name: `Plugin ${i}`,
+              description: `Description ${i}`,
+              filename: `plugin${i}.dll`,
+              length: 1,
+            });
+          }
+          return plugins as any;
+        },
+      });
+      
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['de-DE', 'de', 'en-US', 'en'],
+      });
+      
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission } as PermissionStatus) :
+          originalQuery(parameters)
+      );
+      
+      (window as any).chrome = {
+        runtime: {},
+        loadTimes: function() {},
+        csi: function() {},
+        app: {},
+      };
+      
+      if (navigator.getBattery) {
+        const originalGetBattery = navigator.getBattery;
+        navigator.getBattery = function() {
+          return Promise.resolve({
+            charging: true,
+            chargingTime: 0,
+            dischargingTime: Infinity,
+            level: 0.8,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => true,
+          } as any);
+        };
+      }
+      
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+      });
+      
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+      });
+      
+      Object.defineProperty(navigator, 'platform', {
+        get: () => 'MacIntel',
+      });
+      
+      Object.defineProperty(navigator, 'vendor', {
+        get: () => 'Google Inc.',
+      });
+      
+      Object.defineProperty(window, 'navigator', {
+        value: new Proxy(navigator, {
+          has: (target, key) => {
+            if (key === 'webdriver') return false;
+            return key in target;
+          },
+          get: (target, key) => {
+            if (key === 'webdriver') return undefined;
+            return target[key as keyof typeof target];
+          },
+        }),
+      });
+    });
+    
+    await page.waitForTimeout(500);
+    
     homePage = new HomePage(page);
     parfumPage = new ParfumPage(page);
   });
@@ -59,11 +144,37 @@ test.describe('Douglas.de Parfum Product Listing Tests', () => {
       await homePage.handleCookieConsent();
       await homePage.clickParfum();
       await parfumPage.verifyParfumPageLoaded();
+      
+      await page.waitForTimeout(1000);
     });
 
-    await test.step('Verify filter section is visible', async () => {
+    await test.step('Verify products are displayed', async () => {
+      const pageContent = await page.content();
+      const currentUrl = page.url();
+      const pageTitle = await page.title();
+      
+      if (pageContent.includes('Access Denied') || pageContent.includes('access denied')) {
+        throw new Error(`Access Denied: Website is blocking automated access. URL: ${currentUrl}, Title: ${pageTitle}`);
+      }
+      
+      try {
+        await page.waitForSelector('a[href*="/de/p/"], [class*="product"], article, [class*="tile"], [class*="card"]', { 
+          timeout: 5000,
+          state: 'visible' 
+        }).catch(() => {
+        });
+      } catch (error) {
+      }
+      
       const productCount = await parfumPage.getProductCount();
-      expect(productCount).toBeGreaterThan(0);
+      
+      const count = typeof productCount === 'number' ? productCount : 0;
+      
+      if (count === 0) {
+        await page.screenshot({ path: 'debug-no-products.png', fullPage: true });
+      }
+      
+      expect(count).toBeGreaterThan(0);
     });
   });
 

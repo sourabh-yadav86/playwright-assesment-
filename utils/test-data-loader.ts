@@ -1,9 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-/**
- * Utility class for loading external test data from JSON files
- */
 export class TestDataLoader {
   static loadTestData(filePath: string): any {
     try {

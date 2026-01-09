@@ -2,14 +2,10 @@ import { Page } from '@playwright/test';
 import { BasePage } from './base-page';
 import { config } from '../config/config';
 
-/**
- * Home Page Object Model
- * Handles interactions with the Douglas.de homepage
- */
 export class HomePage extends BasePage {
   private readonly cookieConsentAcceptButton = 'button[id*="accept"], button[class*="accept"], button:has-text("Accept"), button:has-text("Akzeptieren"), button:has-text("ALLE ERLAUBEN")';
   private readonly cookieConsentBanner = '[id*="cookie"], [class*="cookie"], [data-testid*="cookie"]';
-  private readonly parfumLink = 'a:has-text("Parfum"), a[href*="parfum"], nav a:has-text("Parfum"), [href="/de/c/parfum/01"]';
+  private readonly parfumLink = 'nav a[href="/de/c/parfum/01"], a[id*="navigation-main-entry"][href*="parfum"], a[href="/de/c/parfum/01"]';
   private readonly navigationMenu = 'nav, [role="navigation"], header nav, navigation, [class*="navigation"], [class*="menu"]';
 
   constructor(page: Page) {
@@ -42,20 +38,24 @@ export class HomePage extends BasePage {
  
   async clickParfum(): Promise<void> {
     try {
+      const pageContent = await this.page.content();
+      if (pageContent.includes('Access Denied') || pageContent.includes('access denied')) {
+        throw new Error('Cannot navigate to Parfum page: Access Denied detected on current page.');
+      }
       
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(500);
       
       const navVisible = await this.helpers.isVisible(this.navigationMenu, config.timeout.short);
       
-    
       const parfumLinkVisible = await this.helpers.isVisible(this.parfumLink, config.timeout.short);
       
       if (parfumLinkVisible) {
-        await this.helpers.scrollToElement(this.parfumLink);
+        const parfumLinkLocator = this.page.locator(this.parfumLink).first();
+        await parfumLinkLocator.scrollIntoViewIfNeeded();
         
         try {
           await Promise.race([
-            this.helpers.clickWithRetry(this.parfumLink),
+            parfumLinkLocator.click({ timeout: 10000 }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Click timeout')), 10000))
           ]);
           
@@ -65,17 +65,43 @@ export class HomePage extends BasePage {
           ]).catch(() => {
             console.log('Navigation wait timed out, but continuing...');
           });
+          
+          const newPageContent = await this.page.content();
+          if (newPageContent.includes('Access Denied') || newPageContent.includes('access denied')) {
+            throw new Error('Access Denied after navigating to Parfum page.');
+          }
         } catch (error) {
+          if (error instanceof Error && error.message.includes('Access Denied')) {
+            throw error;
+          }
           console.log('Click timeout, navigating directly: ', error);
           await this.page.goto(`${config.baseUrl}/c/parfum/01`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          
+          const directNavContent = await this.page.content();
+          if (directNavContent.includes('Access Denied') || directNavContent.includes('access denied')) {
+            throw new Error('Access Denied after direct navigation to Parfum page.');
+          }
         }
       } else {
         console.log('Parfum link not found, navigating directly');
         await this.page.goto(`${config.baseUrl}/c/parfum/01`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+        const directNavContent = await this.page.content();
+        if (directNavContent.includes('Access Denied') || directNavContent.includes('access denied')) {
+          throw new Error('Access Denied after direct navigation to Parfum page.');
+        }
       }
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Access Denied')) {
+        throw error;
+      }
       console.log('Error clicking Parfum link, navigating directly: ', error);
       await this.page.goto(`${config.baseUrl}/c/parfum/01`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      
+      const finalContent = await this.page.content();
+      if (finalContent.includes('Access Denied') || finalContent.includes('access denied')) {
+        throw new Error('Access Denied: Website is blocking automated access to Parfum page.');
+      }
     }
   }
 
